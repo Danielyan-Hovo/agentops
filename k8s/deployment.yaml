@@ -1,0 +1,98 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agentops
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentops-api
+  namespace: agentops
+spec:
+  selector:
+    app: agentops-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentops-api
+  namespace: agentops
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: agentops-api
+  template:
+    metadata:
+      labels:
+        app: agentops-api
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/danielyan-hovo/agentops:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: AGENTOPS_ENVIRONMENT
+              value: production
+            - name: AGENTOPS_CAPTURE_CONTENT
+              value: "false"
+            - name: AGENTOPS_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: agentops-secrets
+                  key: database-url
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: agentops-api
+  namespace: agentops
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: agentops-api
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 65
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: agentops-api
+  namespace: agentops
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: agentops-api

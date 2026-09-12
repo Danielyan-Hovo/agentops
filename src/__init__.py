@@ -3,6 +3,7 @@
 from .models import SpanKind, SpanStatus, TraceEvent, TraceSpan
 from .api import create_app
 from .repository import TraceRepository
+from .settings import Settings, get_settings
 from .tracer import AgentTracer
 from .validation import AnomalyRule, ValidationIssue, detect_anomalies, validate_trace
 
@@ -13,9 +14,11 @@ __all__ = [
 	"TraceEvent",
 	"TraceRepository",
 	"TraceSpan",
+	"Settings",
 	"AnomalyRule",
 	"ValidationIssue",
 	"create_app",
 	"detect_anomalies",
+	"get_settings",
 	"validate_trace",
 ]
