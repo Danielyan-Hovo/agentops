@@ -484,3 +484,44 @@ class GatewayDashboard:
             "total_reports": len(self._reports),
             "max_reports": self._max_reports,
         }
+
+
+class GatewayIntegration:
+    def __init__(self) -> None:
+        self.event_bus = GatewayEventBus()
+        self.pipeline = GatewayPipeline()
+        self.cache = GatewayCache()
+        self.monitor = GatewayMonitor()
+        self.metrics = GatewayMetrics()
+        self.exporter = MetricsExporter()
+        self.load_balancer = LoadBalancer()
+        self.rate_limiter = RateLimiter()
+        self.config = GatewayConfig()
+        self.orchestrator = GatewayOrchestrator(self.config)
+
+    def initialize_all(self) -> Dict[str, Any]:
+        init_result = self.orchestrator.initialize()
+        self.event_bus.subscribe(GatewayEventType.HEALTH_CHECK, lambda e: None)
+        self.event_bus.subscribe(GatewayEventType.ERROR, lambda e: self.metrics.increment("errors"))
+        return {**init_result, "components": ["event_bus", "pipeline", "cache", "monitor", "metrics", "exporter", "load_balancer", "rate_limiter", "config", "orchestrator"]}
+
+    def process_full_request(self, model: str, provider: Optional[str] = None, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        allowed = self.rate_limiter.is_allowed(f"provider:{provider or 'default'}")
+        if not allowed:
+            return {"status": "rate_limited", "model": model, "provider": provider}
+        selected = self.load_balancer.select_provider([provider] if provider else ["openai", "anthropic", "local"])
+        result = self.orchestrator.process_request(model, selected, payload)
+        self.event_bus.publish(GatewayEvent(event_type=GatewayEventType.PROVIDER_SELECT, provider=selected, model=model))
+        self.event_bus.publish(GatewayEvent(event_type=GatewayEventType.REQUEST_END, provider=selected, model=model, latency_ms=0.0))
+        return result
+
+    def get_full_status(self) -> Dict[str, Any]:
+        return {
+            "orchestrator": self.orchestrator.get_health(),
+            "monitor": self.monitor.summary(),
+            "metrics": self.metrics.summary(),
+            "load_balancer": self.load_balancer.get_stats(),
+            "cache": self.cache.stats(),
+            "rate_limiter": {"remaining": self.rate_limiter.remaining("default")},
+            "event_counts": self.event_bus.event_counts(),
+        }
