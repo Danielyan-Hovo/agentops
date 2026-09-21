@@ -486,6 +486,43 @@ class GatewayDashboard:
         }
 
 
+class ProductionDeploymentValidator:
+    """Production deployment validator ensuring all components are operational."""
+
+    def __init__(self) -> None:
+        self._checks: List[str] = []
+        self._passed: List[str] = []
+        self._failed: List[str] = []
+
+    def add_check(self, name: str, check_fn: Callable[[], bool]) -> None:
+        self._checks.append(name)
+        try:
+            result = check_fn()
+            if result:
+                self._passed.append(name)
+            else:
+                self._failed.append(name)
+        except Exception:
+            self._failed.append(name)
+
+    def validate_all(self) -> Dict[str, Any]:
+        results = {}
+        for name in self._checks:
+            results[name] = name in self._passed
+        return {
+            "passed": len(self._failed) == 0,
+            "passed_count": len(self._passed),
+            "failed_count": len(self._failed),
+            "total": len(self._checks),
+            "results": results,
+        }
+
+    def reset(self) -> None:
+        self._checks.clear()
+        self._passed.clear()
+        self._failed.clear()
+
+
 class GatewayIntegration:
     def __init__(self) -> None:
         self.event_bus = GatewayEventBus()
